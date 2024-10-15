@@ -3,8 +3,23 @@ import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 
+// ランダム文字列生成関数
 function generateRandomString() {
-  return crypto.randomBytes(3).toString('hex')
+  return crypto.randomBytes(3).toString('hex') // 6文字のランダム文字列
+}
+
+// 日時を `YYYY-MM-DD-HHMM-SS` 形式にフォーマットする関数
+function formatDate(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0')
+
+  const year = date.getFullYear()
+  const month = pad(date.getMonth() + 1) // 月は0ベース
+  const day = pad(date.getDate())
+  const hours = pad(date.getHours())
+  const minutes = pad(date.getMinutes())
+  const seconds = pad(date.getSeconds())
+
+  return `${year}-${month}-${day}-${hours}${minutes}-${seconds}`
 }
 
 export async function POST(request: Request) {
@@ -20,11 +35,15 @@ export async function POST(request: Request) {
     fs.mkdirSync(saveDir, { recursive: true })
   }
   
-  // 現在の日時とランダムな文字列を使用してファイル名を生成
+  // 現在の日時をフォーマット
   const now = new Date()
-  const dateString = now.toISOString().replace(/[-:]/g, '').slice(0, 15)
+  const formattedDate = formatDate(now)
+  
+  // ランダム文字列生成
   const randomString = generateRandomString()
-  const fileName = `${dateString}-${randomString}.png`
+  
+  // ファイル名生成
+  const fileName = `${formattedDate}-${randomString}.png`
   const filePath = path.join(saveDir, fileName)
   
   // 画像を保存
