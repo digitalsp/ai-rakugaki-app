@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/card"
 import { Shuffle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
-// お題リスト
 const topics = [
   "うちゅうせん",
   "かいじゅう",
@@ -35,7 +34,7 @@ export default function LandingPage() {
 
   const handleStartDrawing = async () => {
     try {
-      const response = await fetch('/api/route', {
+      const response = await fetch('/api/set-topic', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
