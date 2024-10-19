@@ -1,54 +1,54 @@
+// frontend/src/app/page.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Shuffle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-
-// お題リスト
-const topics = [
-  "うちゅうせん",
-  "かいじゅう",
-  "おばけ",
-  "ロボット",
-  "まほうつかい",
-  "ゆめのせかい",
-  "たからもの",
-  "ともだち",
-  "ぼうけん",
-  "おんがく"
-]
+import axios from 'axios'
 
 export default function LandingPage() {
   const [currentTopic, setCurrentTopic] = useState('')
   const router = useRouter()
 
   useEffect(() => {
-    selectRandomTopic()
+    registerDevice()
   }, [])
 
-  const selectRandomTopic = () => {
-    const randomIndex = Math.floor(Math.random() * topics.length)
-    setCurrentTopic(topics[randomIndex])
-  }
-
-  const handleStartDrawing = async () => {
+  const registerDevice = async () => {
     try {
-      const response = await fetch('/api/route', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ topic: currentTopic }),
-      })
-      if (response.ok) {
+      // デバイス登録リクエスト
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/register-device`, {})
+      if (response.data.success) {
+        const { device_id, topic } = response.data
+        // デバイスIDとお題をローカルストレージに保存
+        localStorage.setItem('device_id', device_id)
+        localStorage.setItem('current_topic', topic || '')
+        setCurrentTopic(topic || '')
+        // 描画ページにリダイレクト
         router.push('/draw')
       } else {
-        console.error('トピックの設定に失敗しました')
+        console.error('デバイスの登録に失敗しました')
       }
     } catch (error) {
-      console.error('トピックの設定中にエラーが発生しました:', error)
+      console.error('デバイスの登録中にエラーが発生しました:', error)
+    }
+  }
+
+  const selectRandomTopic = async () => {
+    try {
+      // 再度デバイスを登録し、新しいお題を取得
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/register-device`, {})
+      if (response.data.success) {
+        const { topic } = response.data
+        localStorage.setItem('current_topic', topic || '')
+        setCurrentTopic(topic || '')
+      } else {
+        console.error('新しいお題の取得に失敗しました')
+      }
+    } catch (error) {
+      console.error('新しいお題の取得中にエラーが発生しました:', error)
     }
   }
 
@@ -60,7 +60,7 @@ export default function LandingPage() {
         </h1>
         
         <h2 className="text-2xl sm:text-3xl font-semibold mb-8 text-blue-500">
-          お題：「{currentTopic}」
+          お題：「{currentTopic || '...' }」
         </h2>
         
         <div className="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4">
@@ -73,8 +73,9 @@ export default function LandingPage() {
           </Button>
           
           <Button
-            onClick={handleStartDrawing}
+            onClick={() => router.push('/draw')}
             className="bg-green-500 hover:bg-green-600 text-white px-6 py-3"
+            disabled={!currentTopic}
           >
             描き始める
           </Button>

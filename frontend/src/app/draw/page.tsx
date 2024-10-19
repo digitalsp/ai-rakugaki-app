@@ -1,10 +1,11 @@
+// frontend/src/app/draw/page.tsx
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Button } from "./ui/button"
-import { Card } from "./ui/card"
-import { Progress } from "./ui/progress"
-import { Pencil, Eraser, RotateCcw, Send, Play, XCircle} from 'lucide-react'
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
+import { Pencil, Eraser, RotateCcw, Send, Play, XCircle } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogContent,
@@ -12,8 +13,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "./ui/alert-dialog"
+} from "@/components/ui/alert-dialog"
 
+import { useRouter } from 'next/navigation'
+import axios from 'axios'
 
 export default function DrawingPage() {
   const [isDrawing, setIsDrawing] = useState(false)
@@ -22,10 +25,53 @@ export default function DrawingPage() {
   const [isTimeUp, setIsTimeUp] = useState(false)
   const [isStarted, setIsStarted] = useState(false)
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
+  const [currentTopic, setCurrentTopic] = useState('')
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const contextRef = useRef<CanvasRenderingContext2D | null>(null)
   const isSavedRef = useRef(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const router = useRouter()
+  const [ws, setWs] = useState<WebSocket | null>(null)
+  const [deviceId, setDeviceId] = useState<string | null>(null)
+
+  useEffect(() => {
+    // ローカルストレージからデバイスIDとお題を取得
+    const storedDeviceId = localStorage.getItem('device_id')
+    const storedTopic = localStorage.getItem('current_topic')
+    if (storedDeviceId && storedTopic) {
+      setDeviceId(storedDeviceId)
+      setCurrentTopic(storedTopic)
+    } else {
+      // デバイスIDが存在しない場合はランディングページにリダイレクト
+      router.push('/')
+    }
+  }, [router])
+
+  useEffect(() => {
+    if (deviceId) {
+      // WebSocketの設定
+      const socket = new WebSocket(`ws://localhost:8000/ws/${deviceId}`)
+      socket.onopen = () => {
+        console.log('WebSocket接続が確立しました')
+      }
+      socket.onmessage = (event) => {
+        const data = event.data
+        setGeneratedImage(data)
+        console.log('生成された画像を受信しました:', data)
+        // 生成画像を受信したら生成画像表示ページに遷移
+        router.push('/generated')
+      }
+      socket.onerror = (error) => {
+        console.error('WebSocketエラー:', error)
+      }
+      setWs(socket)
+
+      return () => {
+        socket.close()
+      }
+    }
+  }, [deviceId, router])
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -51,7 +97,7 @@ export default function DrawingPage() {
             clearInterval(timerRef.current as NodeJS.Timeout)
             setIsTimeUp(true)
             setIsStarted(false) // タイムアップ時に isStarted を false に設定
-            saveImage()
+            saveCanvasImage()
             return 0
           }
           return prevTime - 1
@@ -63,7 +109,7 @@ export default function DrawingPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [isStarted, isConfirmDialogOpen, isTimeUp]) // timeLeft を依存配列から削除
+  }, [isStarted, isConfirmDialogOpen, isTimeUp])
 
   const startDrawing = ({ nativeEvent }: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isStarted || isTimeUp) return
@@ -89,8 +135,10 @@ export default function DrawingPage() {
     if (contextRef.current) {
       if (tool === 'eraser') {
         contextRef.current.globalCompositeOperation = 'destination-out'
+        contextRef.current.lineWidth = 10
       } else {
         contextRef.current.globalCompositeOperation = 'source-over'
+        contextRef.current.lineWidth = 4
       }
       contextRef.current.lineTo(offsetX, offsetY)
       contextRef.current.stroke()
@@ -104,56 +152,31 @@ export default function DrawingPage() {
     }
   }
 
-  const saveImage = async () => {
-    if (canvasRef.current && !isSavedRef.current) {
-      isSavedRef.current = true // 早期にフラグを設定して二重保存を防ぐ
+  const saveCanvasImage = async () => {
+    if (canvasRef.current && deviceId && !isSavedRef.current) {
+      isSavedRef.current = true // 二重保存を防ぐフラグ
       const image = canvasRef.current.toDataURL('image/png')
       try {
-        const response = await fetch('/api/save-image', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ image }),
+        const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/save-canvas`, {
+          device_id: deviceId,
+          image_data: image,
         })
-        const data = await response.json()
-        if (data.success) {
-          console.log('画像が保存されました:', data.fileName)
+        if (response.data.success) {
+          console.log('キャンバス画像が保存されました:', response.data.file_name)
+        } else {
+          console.error('キャンバス画像の保存に失敗しました')
         }
       } catch (error) {
-        console.error('画像の保存に失敗しました:', error)
+        console.error('キャンバス画像の保存中にエラーが発生しました:', error)
       }
     }
-  }
-
-  const handleStart = () => {
-    setIsStarted(true)
-    setTimeLeft(30)
-    setIsTimeUp(false)
-    clearCanvas()
-    isSavedRef.current = false
-  }
-
-  const handleFinish = () => {
-    if (!isTimeUp) {
-      setIsConfirmDialogOpen(true)
-    } else {
-      saveImage()
-    }
-  }
-
-  const confirmFinish = () => {
-    setIsConfirmDialogOpen(false)
-    setIsTimeUp(true)
-    setIsStarted(false) // 早期終了時に isStarted を false に設定
-    saveImage()
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-8">
       <Card className="max-w-4xl mx-auto p-6 bg-white rounded-xl shadow-lg">
         <h1 className="text-3xl font-bold text-center mb-4 text-purple-600">AIお絵かきチャレンジ！</h1>
-        <h2 className="text-xl font-semibold text-center mb-6 text-blue-500">お題：「うちゅうせん」</h2>
+        <h2 className="text-xl font-semibold text-center mb-6 text-blue-500">お題：「{currentTopic}」</h2>
         
         <div className="relative mb-4">
           <canvas
@@ -165,7 +188,7 @@ export default function DrawingPage() {
           />
           {isTimeUp && (
             <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
-              <p className="text-white text-3xl font-bold">終了！</p>
+              <p className="text-white text-3xl font-bold">時間終了！</p>
             </div>
           )}
         </div>
@@ -193,13 +216,19 @@ export default function DrawingPage() {
             </Button>
           </div>
           {!isStarted ? (
-            <Button onClick={handleStart} className="bg-green-500 hover:bg-green-600">
+            <Button onClick={() => {
+              setIsStarted(true)
+              setTimeLeft(30)
+              setIsTimeUp(false)
+              clearCanvas()
+              isSavedRef.current = false
+            }} className="bg-green-500 hover:bg-green-600">
               スタート
               <Play className="h-4 w-4 ml-2" />
             </Button>
           ) : (
-            <Button onClick={handleFinish} disabled={isTimeUp && isSavedRef.current} className="bg-green-500 hover:bg-green-600">
-              {isTimeUp ? '保存' : '終了'}
+            <Button onClick={() => setIsConfirmDialogOpen(true)} disabled={isTimeUp && isSavedRef.current} className="bg-orange-500 hover:bg-orange-600">
+              終了
               <Send className="h-4 w-4 ml-2" />
             </Button>
           )}
@@ -211,7 +240,7 @@ export default function DrawingPage() {
         </div>
       </Card>
 
-      {/* 改良された確認ダイアログをAlertDialogに変更 */}
+      {/* 確認ダイアログ */}
       <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
         <AlertDialogContent className="bg-gradient-to-b from-blue-100 to-purple-100 rounded-xl p-6 shadow-lg">
           <AlertDialogHeader>
@@ -233,10 +262,14 @@ export default function DrawingPage() {
             </Button>
             <Button
               className="bg-red-500 text-white hover:bg-red-600 flex items-center"
-              onClick={confirmFinish}
+              onClick={() => {
+                setIsConfirmDialogOpen(false)
+                setIsTimeUp(true)
+                setIsStarted(false) // 早期終了時に isStarted を false に設定
+                saveCanvasImage()
+              }}
             >
-              {/* <CheckCircle className="h-5 w-5 mr-2" /> */}
-               終わる 
+              終わる 
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
