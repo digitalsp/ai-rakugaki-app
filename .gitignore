@@ -37,7 +37,7 @@
 /frontend/next-env.d.ts
 
 # tempolary files
-/frontend/public/saved-images/*
+/backend/saved-images/*
 
 
 # backend
@@ -45,3 +45,6 @@
 /backend/app/__pycache__/
 /backend/disable/
 /.mypy_cache/
+
+# database
+/backend/app.db

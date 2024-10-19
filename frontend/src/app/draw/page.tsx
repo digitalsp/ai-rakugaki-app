@@ -25,7 +25,7 @@ export default function DrawingPage() {
   const [isTimeUp, setIsTimeUp] = useState(false)
   const [isStarted, setIsStarted] = useState(false)
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
-  const [currentTopic, setCurrentTopic] = useState('')
+  const [currentTopic, setCurrentTopic] = useState<string>('')
   const [generatedImage, setGeneratedImage] = useState<string | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const contextRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -33,7 +33,8 @@ export default function DrawingPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const router = useRouter()
   const [ws, setWs] = useState<WebSocket | null>(null)
-  const [deviceId, setDeviceId] = useState<string | null>(null)
+  const [deviceId, setDeviceId] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // ローカルストレージからデバイスIDとお題を取得
@@ -51,10 +52,14 @@ export default function DrawingPage() {
   useEffect(() => {
     if (deviceId) {
       // WebSocketの設定
-      const socket = new WebSocket(`ws://localhost:8000/ws/${deviceId}`)
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
+      const wsHost = process.env.NEXT_PUBLIC_BACKEND_WS_HOST || 'localhost:8000'
+      const socket = new WebSocket(`${wsProtocol}${wsHost}/ws/${deviceId}`)
+
       socket.onopen = () => {
         console.log('WebSocket接続が確立しました')
       }
+
       socket.onmessage = (event) => {
         const data = event.data
         setGeneratedImage(data)
@@ -62,9 +67,12 @@ export default function DrawingPage() {
         // 生成画像を受信したら生成画像表示ページに遷移
         router.push('/generated')
       }
+
       socket.onerror = (error) => {
         console.error('WebSocketエラー:', error)
+        setError('WebSocket接続に問題が発生しました')
       }
+
       setWs(socket)
 
       return () => {
@@ -157,7 +165,8 @@ export default function DrawingPage() {
       isSavedRef.current = true // 二重保存を防ぐフラグ
       const image = canvasRef.current.toDataURL('image/png')
       try {
-        const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/save-canvas`, {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+        const response = await axios.post(`${backendUrl}/save-canvas`, {
           device_id: deviceId,
           image_data: image,
         })
@@ -165,9 +174,11 @@ export default function DrawingPage() {
           console.log('キャンバス画像が保存されました:', response.data.file_name)
         } else {
           console.error('キャンバス画像の保存に失敗しました')
+          setError('キャンバス画像の保存に失敗しました')
         }
       } catch (error) {
         console.error('キャンバス画像の保存中にエラーが発生しました:', error)
+        setError('キャンバス画像の保存中にエラーが発生しました')
       }
     }
   }
@@ -177,7 +188,9 @@ export default function DrawingPage() {
       <Card className="max-w-4xl mx-auto p-6 bg-white rounded-xl shadow-lg">
         <h1 className="text-3xl font-bold text-center mb-4 text-purple-600">AIお絵かきチャレンジ！</h1>
         <h2 className="text-xl font-semibold text-center mb-6 text-blue-500">お題：「{currentTopic}」</h2>
-        
+
+        {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
+
         <div className="relative mb-4">
           <canvas
             ref={canvasRef}
@@ -222,12 +235,12 @@ export default function DrawingPage() {
               setIsTimeUp(false)
               clearCanvas()
               isSavedRef.current = false
-            }} className="bg-green-500 hover:bg-green-600">
+            }} className="bg-green-500 hover:bg-green-600 flex items-center" disabled={!currentTopic}>
               スタート
               <Play className="h-4 w-4 ml-2" />
             </Button>
           ) : (
-            <Button onClick={() => setIsConfirmDialogOpen(true)} disabled={isTimeUp && isSavedRef.current} className="bg-orange-500 hover:bg-orange-600">
+            <Button onClick={() => setIsConfirmDialogOpen(true)} disabled={isTimeUp && isSavedRef.current} className="bg-orange-500 hover:bg-orange-600 flex items-center">
               終了
               <Send className="h-4 w-4 ml-2" />
             </Button>
@@ -269,7 +282,7 @@ export default function DrawingPage() {
                 saveCanvasImage()
               }}
             >
-              終わる 
+              終わる
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -16,6 +16,17 @@ class DeviceRegisterResponse(BaseModel):
     topic: Optional[str] = None
 
 
+# 新しいお題取得リクエスト
+class GetNewTopicRequest(BaseModel):
+    device_id: str
+
+
+# 新しいお題取得レスポンス
+class GetNewTopicResponse(BaseModel):
+    success: bool
+    topic: Optional[str] = None
+
+
 # キャンバス画像保存リクエスト
 class SaveCanvasRequest(BaseModel):
     device_id: str

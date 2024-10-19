@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles  # 必要なインポートを追加
 from PIL import Image
 from sqlalchemy.orm import Session
 
-from . import crud, database, models, schemas, utils
+from . import crud, database, models, schemas, utils, init_db  # init_db をインポート
 
 app = FastAPI()
 
@@ -29,10 +29,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# データベースの初期化
-models.Base.metadata.create_all(bind=database.engine)
-
-
 # 依存関係
 def get_db():
     db = database.SessionLocal()
@@ -40,7 +36,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
 
 # WebSocketマネージャー
 class ConnectionManager:
@@ -63,7 +58,6 @@ class ConnectionManager:
         if websocket:
             await websocket.send_text(message)
 
-
 manager = ConnectionManager()
 
 # 必要なディレクトリの作成
@@ -75,6 +69,11 @@ for directory in [SAVED_IMAGES_DIR, GENERATED_IMAGES_DIR]:
     if not directory.exists():
         directory.mkdir(parents=True, exist_ok=True)
         print(f"ディレクトリ '{directory}' を作成しました。")
+
+# 起動時にデータベースを初期化
+@app.on_event("startup")
+def on_startup():
+    init_db.init_db()
 
 # エンドポイント
 
@@ -88,7 +87,9 @@ def register_device(
     """
     db_device = crud.create_device(db)
     db_topic = crud.get_random_topic(db)
-    topic_name = db_topic.name if db_topic else None
+    if not db_topic:
+        raise HTTPException(status_code=500, detail="お題の取得に失敗しました")
+    topic_name = db_topic.name
     return schemas.DeviceRegisterResponse(
         success=True, device_id=db_device.device_id, topic=topic_name
     )
@@ -120,6 +121,17 @@ def save_canvas(request: schemas.SaveCanvasRequest, db: Session = Depends(get_db
     )
 
 
+@app.post("/get-new-topic", response_model=schemas.GetNewTopicResponse)
+def get_new_topic(request: schemas.GetNewTopicRequest, db: Session = Depends(get_db)):
+    """
+    既存のデバイスIDに対して新しいお題を取得するエンドポイント
+    """
+    db_topic = crud.get_random_topic(db)
+    if not db_topic:
+        raise HTTPException(status_code=500, detail="お題の取得に失敗しました")
+    return schemas.GetNewTopicResponse(success=True, topic=db_topic.name)
+
+
 @app.get("/latest-images", response_model=schemas.LatestImagesResponse)
 def get_latest_images(device_id: str, db: Session = Depends(get_db)):
     """
@@ -146,7 +158,6 @@ def get_latest_images(device_id: str, db: Session = Depends(get_db)):
         return schemas.LatestImagesResponse(
             success=False, canvas_image_url=None, generated_image_url=None
         )
-
 
 # 静的ファイルの提供
 app.mount("/saved-images", StaticFiles(directory=SAVED_IMAGES_DIR), name="saved-images")
