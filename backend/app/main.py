@@ -5,14 +5,27 @@ import logging
 import uuid
 from typing import Dict
 
-from fastapi import (Depends, FastAPI, HTTPException, WebSocket,
-                     WebSocketDisconnect)
+from fastapi import (BackgroundTasks, Depends, FastAPI, HTTPException,
+                     WebSocket, WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from . import crud, database, models, schemas
 
 app = FastAPI()
+
+# 既存のコードの後に追加
+app.mount(
+    "/saved-images",
+    StaticFiles(directory=database.saved_images_dir),
+    name="saved-images",
+)
+app.mount(
+    "/generated-images",
+    StaticFiles(directory=database.generated_images_dir),
+    name="generated-images",
+)
 
 # ロギングの設定
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +39,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,            # 必要なオリジンのみ許可
+    allow_origins=origins,  # 必要なオリジンのみ許可
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,7 +51,9 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     import app.init_db
+
     app.init_db.init_db()
+
 
 # Dependency
 
@@ -49,6 +64,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 # WebSocket connection manager
 
@@ -91,17 +107,14 @@ def register_device(
         logger.error("Failed to retrieve a random topic.")
         raise HTTPException(status_code=500, detail="お題の取得に失敗しました")
     topic_name = db_topic.name
-    logger.info(
-        f"Assigned topic '{topic_name}' to device '{db_device.device_id}'")
+    logger.info(f"Assigned topic '{topic_name}' to device '{db_device.device_id}'")
     return schemas.DeviceRegisterResponse(
         success=True, device_id=db_device.device_id, topic=topic_name
     )
 
 
 @app.post("/verify-device", response_model=schemas.DeviceVerifyResponse)
-def verify_device(
-    request: schemas.DeviceVerifyRequest, db: Session = Depends(get_db)
-):
+def verify_device(request: schemas.DeviceVerifyRequest, db: Session = Depends(get_db)):
     """
     デバイスIDがデータベースに存在するかを確認し、存在すればデバイスIDと現在のお題を返す
     """
@@ -112,8 +125,12 @@ def verify_device(
             success=False, detail="デバイスIDが存在しません。"
         )
     # Get latest image assigned to device via latest image
-    latest_image = db.query(models.Image).filter(
-        models.Image.device_id == device_id).order_by(models.Image.request_time.desc()).first()
+    latest_image = (
+        db.query(models.Image)
+        .filter(models.Image.device_id == device_id)
+        .order_by(models.Image.request_time.desc())
+        .first()
+    )
     if latest_image and latest_image.topic:
         topic_name = latest_image.topic.name
     else:
@@ -128,9 +145,7 @@ def verify_device(
 
 
 @app.post("/get-new-topic", response_model=schemas.GetNewTopicResponse)
-def get_new_topic(
-    request: schemas.GetNewTopicRequest, db: Session = Depends(get_db)
-):
+def get_new_topic(request: schemas.GetNewTopicRequest, db: Session = Depends(get_db)):
     """
     指定されたデバイスIDに新しいお題を割り当てて返すエンドポイント
     """
@@ -144,24 +159,24 @@ def get_new_topic(
         raise HTTPException(status_code=500, detail="お題の取得に失敗しました。")
 
     # Optionally, create a new Image entry with the new topic
-    db_image = crud.create_image(
-        db, device_id, db_topic.id, canvas_image_filename=""
-    )
+    db_image = crud.create_image(db, device_id, db_topic.id, canvas_image_filename="")
     logger.info(
-        f"Assigned new topic '{db_topic.name}' to device '{device_id}', Image ID: {db_image.id}")
-
-    return schemas.GetNewTopicResponse(
-        success=True, topic=db_topic.name
+        f"Assigned new topic '{db_topic.name}' to device '{device_id}', Image ID: {db_image.id}"
     )
+
+    return schemas.GetNewTopicResponse(success=True, topic=db_topic.name)
 
 
 @app.post("/save-canvas", response_model=schemas.SaveCanvasResponse)
-async def save_canvas(request: schemas.SaveCanvasRequest, db: Session = Depends(get_db)):
+async def save_canvas(
+    request: schemas.SaveCanvasRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """
-    キャンバス画像を保存し、画像生成プロセスを開始するエンドポイント
+    キャンバス画像を保存し、画像生成プロセスをバックグラウンドで開始するエンドポイント
     """
-    logger.info(
-        f"Received /save-canvas request: device_id={request.device_id}")
+    logger.info(f"Received /save-canvas request: device_id={request.device_id}")
 
     # デバイスの存在確認
     db_device = crud.get_device(db, request.device_id)
@@ -171,13 +186,15 @@ async def save_canvas(request: schemas.SaveCanvasRequest, db: Session = Depends(
 
     # 画像の保存
     import app.utils
+
     SAVED_IMAGES_DIR = database.saved_images_dir
-    file_path = app.utils.save_image(
-        request.image_data, directory=SAVED_IMAGES_DIR)
+    file_path = app.utils.save_image(request.image_data, directory=SAVED_IMAGES_DIR)
     if not file_path:
         logger.error("画像の保存に失敗しました。")
         raise HTTPException(
-            status_code=400, detail="画像の保存に失敗しました。データ形式を確認してください。")
+            status_code=400,
+            detail="画像の保存に失敗しました。データ形式を確認してください。",
+        )
 
     logger.info(f"画像を保存しました: {file_path}")
 
@@ -186,16 +203,16 @@ async def save_canvas(request: schemas.SaveCanvasRequest, db: Session = Depends(
     if not db_topic:
         logger.error("お題の取得に失敗しました。")
         raise HTTPException(
-            status_code=500, detail="お題の取得に失敗しました。データベースを確認してください。")
+            status_code=500,
+            detail="お題の取得に失敗しました。データベースを確認してください。",
+        )
 
     # データベースに画像情報を保存
-    db_image = crud.create_image(
-        db, request.device_id, db_topic.id, file_path.name)
+    db_image = crud.create_image(db, request.device_id, db_topic.id, file_path.name)
     logger.info(f"Image entry created: {db_image.id}")
 
-    # 非同期で画像生成プロセスを開始
-    asyncio.create_task(process_image_generation(
-        db_image.id, request.device_id))
+    # バックグラウンドで画像生成プロセスを開始
+    background_tasks.add_task(process_image_generation, db_image.id, request.device_id)
 
     return schemas.SaveCanvasResponse(
         success=True, file_name=db_image.canvas_image_filename
@@ -203,14 +220,17 @@ async def save_canvas(request: schemas.SaveCanvasRequest, db: Session = Depends(
 
 
 @app.websocket("/ws/{device_id}")
-async def websocket_endpoint(websocket: WebSocket, device_id: str, db: Session = Depends(get_db)):
+async def websocket_endpoint(
+    websocket: WebSocket, device_id: str, db: Session = Depends(get_db)
+):
     try:
         # Verify device_id before accepting WebSocket connection
         db_device = crud.get_device(db, device_id)
         if not db_device:
             await websocket.close(code=1008, reason="Invalid device_id")
             logger.warning(
-                f"WebSocket connection rejected: invalid device_id={device_id}")
+                f"WebSocket connection rejected: invalid device_id={device_id}"
+            )
             return
 
         await manager.connect(device_id, websocket)
@@ -231,8 +251,12 @@ async def process_image_generation(image_id: int, device_id: str):
     db = database.SessionLocal()
     try:
         # プロンプトの取得
-        latest_image = db.query(models.Image).filter(
-            models.Image.device_id == device_id).order_by(models.Image.request_time.desc()).first()
+        latest_image = (
+            db.query(models.Image)
+            .filter(models.Image.device_id == device_id)
+            .order_by(models.Image.request_time.desc())
+            .first()
+        )
         if not latest_image or not latest_image.topic:
             logger.error(f"デバイスID {device_id} に対応するプロンプトが見つかりません")
             return
@@ -241,8 +265,7 @@ async def process_image_generation(image_id: int, device_id: str):
         logger.info(f"Prompt for image_id={image_id}: {prompt}")
 
         # キャンバス画像の取得
-        db_image = db.query(models.Image).filter(
-            models.Image.id == image_id).first()
+        db_image = db.query(models.Image).filter(models.Image.id == image_id).first()
         if not db_image:
             logger.error(f"画像ID {image_id} に対応する画像が見つかりません")
             return
@@ -254,16 +277,16 @@ async def process_image_generation(image_id: int, device_id: str):
             return
 
         # 生成画像のパスを設定
-        generated_file_path = GENERATED_IMAGES_DIR / \
-            f"generated_{db_image.id}.png"
+        generated_file_path = GENERATED_IMAGES_DIR / f"generated_{db_image.id}.png"
 
         # 画像生成の実行
         import app.image_generator
+
         try:
             app.image_generator.main(
                 input_image_path=str(canvas_file_path),
                 prompt=prompt,
-                output_image_path=str(generated_file_path)
+                output_image_path=str(generated_file_path),
             )
         except Exception as e:
             logger.exception(f"画像生成に失敗しました: {e}")
@@ -274,8 +297,21 @@ async def process_image_generation(image_id: int, device_id: str):
         logger.info(f"Generated image saved: {generated_file_path}")
 
         # WebSocketを通じてフロントエンドに通知
-        generated_image_url = f"http://localhost:8000/generated-images/{generated_file_path.name}"
-        await manager.send_message(device_id, generated_image_url)
+        generated_image_url = (
+            f"http://localhost:8000/generated-images/{generated_file_path.name}"
+        )
+        canvas_image_url = (
+            f"http://localhost:8000/saved-images/{db_image.canvas_image_filename}"
+        )
+        topic = db_image.topic.name if db_image.topic else ""
+
+        # WebSocketメッセージに必要な情報を含める
+        notification = {
+            "canvasImageUrl": canvas_image_url,
+            "generatedImageUrl": generated_image_url,
+            "topic": topic,
+        }
+        await manager.send_message(device_id, json.dumps(notification))
 
     except Exception as e:
         logger.exception(f"画像生成プロセス中にエラーが発生しました: {e}")
@@ -286,7 +322,10 @@ async def process_image_generation(image_id: int, device_id: str):
 @app.get("/list-devices")
 def list_devices(db: Session = Depends(get_db)):
     devices = db.query(models.Device).all()
-    return [{"device_id": device.device_id, "created_at": device.created_at} for device in devices]
+    return [
+        {"device_id": device.device_id, "created_at": device.created_at}
+        for device in devices
+    ]
 
 
 @app.get("/images/{device_id}", response_model=schemas.GetImagesResponse)
@@ -298,15 +337,14 @@ def get_images(device_id: str, db: Session = Depends(get_db)):
         )
     image_list = []
     for img in images:
-        image_list.append({
-            "id": img.id,
-            "topic": img.topic.name if img.topic else "",
-            "request_time": img.request_time,
-            "canvas_image_filename": img.canvas_image_filename,
-            "controlnet_image_filename": img.controlnet_image_filename,
-            "generated_image_filename": img.generated_image_filename,
-        })
-    return schemas.GetImagesResponse(
-        success=True,
-        images=image_list
-    )
+        image_list.append(
+            {
+                "id": img.id,
+                "topic": img.topic.name if img.topic else "",
+                "request_time": img.request_time,
+                "canvas_image_filename": img.canvas_image_filename,
+                "controlnet_image_filename": img.controlnet_image_filename,
+                "generated_image_filename": img.generated_image_filename,
+            }
+        )
+    return schemas.GetImagesResponse(success=True, images=image_list)

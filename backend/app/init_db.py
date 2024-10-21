@@ -40,7 +40,7 @@ def init_db():
         if not db.query(models.Topic).first():
             initial_topics = [
                 models.Topic(
-                    name="お題1", prompt="masterpiece, cool, cute, robot"),
+                    name="ロボット", prompt="masterpiece, cool, cute, robot"),
                 models.Topic(
                     name="うちゅうせん", prompt="masterpiece, spaceship, space, galaxy, stars"),
                 models.Topic(name="ねこ", prompt="masterpiece, cat, cute"),

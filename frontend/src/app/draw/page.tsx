@@ -21,20 +21,18 @@ import axios from 'axios'
 export default function DrawingPage() {
   const [isDrawing, setIsDrawing] = useState(false)
   const [tool, setTool] = useState<'pencil' | 'eraser'>('pencil')
-  const [timeLeft, setTimeLeft] = useState(30)
+  const [timeLeft, setTimeLeft] = useState(30) // 30秒に設定
   const [isTimeUp, setIsTimeUp] = useState(false)
   const [isStarted, setIsStarted] = useState(false)
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
   const [currentTopic, setCurrentTopic] = useState<string>('')
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const contextRef = useRef<CanvasRenderingContext2D | null>(null)
   const isSavedRef = useRef(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const router = useRouter()
-  const [ws, setWs] = useState<WebSocket | null>(null)
   const [deviceId, setDeviceId] = useState<string>('')
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // ローカルストレージからデバイスIDとお題を取得
@@ -48,38 +46,6 @@ export default function DrawingPage() {
       router.push('/')
     }
   }, [router])
-
-  useEffect(() => {
-    if (deviceId) {
-      // WebSocketの設定
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
-      const wsHost = process.env.NEXT_PUBLIC_BACKEND_WS_HOST || 'localhost:8000'
-      const socket = new WebSocket(`${wsProtocol}${wsHost}/ws/${deviceId}`)
-
-      socket.onopen = () => {
-        console.log('WebSocket接続が確立しました')
-      }
-
-      socket.onmessage = (event) => {
-        const data = event.data
-        setGeneratedImage(data)
-        console.log('生成された画像を受信しました:', data)
-        // 生成画像を受信したら生成画像表示ページに遷移
-        router.push('/generated')
-      }
-
-      socket.onerror = (error) => {
-        console.error('WebSocketエラー:', error)
-        setError('WebSocket接続に問題が発生しました')
-      }
-
-      setWs(socket)
-
-      return () => {
-        socket.close()
-      }
-    }
-  }, [deviceId, router])
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -104,20 +70,20 @@ export default function DrawingPage() {
           if (prevTime <= 1) {
             clearInterval(timerRef.current as NodeJS.Timeout)
             setIsTimeUp(true)
-            setIsStarted(false) // タイムアップ時に isStarted を false に設定
+            setIsStarted(false)
             saveCanvasImage()
             return 0
           }
           return prevTime - 1
         })
-      }, 1000)
+      }, 1000) // 毎秒実行
     } else {
       clearInterval(timerRef.current as NodeJS.Timeout)
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [isStarted, isConfirmDialogOpen, isTimeUp])
+  }, [isStarted, isConfirmDialogOpen])
 
   const startDrawing = ({ nativeEvent }: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isStarted || isTimeUp) return
@@ -172,6 +138,10 @@ export default function DrawingPage() {
         })
         if (response.data.success) {
           console.log('キャンバス画像が保存されました:', response.data.file_name)
+          // 結果ページへ遷移し、キャンバス画像URLとデバイスIDをクエリパラメータとして渡す
+          const canvasImageUrl = `${backendUrl}/saved-images/${response.data.file_name}`
+          const destinationUrl = `/result?canvasImageUrl=${encodeURIComponent(canvasImageUrl)}&deviceId=${encodeURIComponent(deviceId)}&topic=${encodeURIComponent(currentTopic)}`
+          router.push(destinationUrl)
         } else {
           console.error('キャンバス画像の保存に失敗しました')
           setError('キャンバス画像の保存に失敗しました')
@@ -181,6 +151,24 @@ export default function DrawingPage() {
         setError('キャンバス画像の保存中にエラーが発生しました')
       }
     }
+  }
+
+  const handleStart = () => {
+    setIsStarted(true)
+    setTimeLeft(30) // 30秒に設定
+    setIsTimeUp(false)
+    clearCanvas()
+    isSavedRef.current = false
+  }
+
+  const handleStop = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    setIsTimeUp(true)
+    setIsStarted(false)
+    saveCanvasImage()
   }
 
   return (
@@ -229,18 +217,20 @@ export default function DrawingPage() {
             </Button>
           </div>
           {!isStarted ? (
-            <Button onClick={() => {
-              setIsStarted(true)
-              setTimeLeft(30)
-              setIsTimeUp(false)
-              clearCanvas()
-              isSavedRef.current = false
-            }} className="bg-green-500 hover:bg-green-600 flex items-center" disabled={!currentTopic}>
+            <Button
+              onClick={handleStart}
+              className="bg-green-500 hover:bg-green-600 flex items-center"
+              disabled={!currentTopic}
+            >
               スタート
               <Play className="h-4 w-4 ml-2" />
             </Button>
           ) : (
-            <Button onClick={() => setIsConfirmDialogOpen(true)} disabled={isTimeUp && isSavedRef.current} className="bg-orange-500 hover:bg-orange-600 flex items-center">
+            <Button
+              onClick={() => setIsConfirmDialogOpen(true)}
+              disabled={isTimeUp && isSavedRef.current}
+              className="bg-orange-500 hover:bg-orange-600 flex items-center"
+            >
               終了
               <Send className="h-4 w-4 ml-2" />
             </Button>
@@ -248,7 +238,7 @@ export default function DrawingPage() {
         </div>
 
         <div className="flex items-center space-x-4">
-          <Progress value={(timeLeft / 30) * 100} className="flex-grow" />
+          <Progress value={(timeLeft / 30) * 100} className="flex-grow" /> {/* 30秒に合わせて調整 */}
           <span className="text-lg font-semibold text-blue-600">{timeLeft}秒</span>
         </div>
       </Card>
@@ -277,9 +267,7 @@ export default function DrawingPage() {
               className="bg-red-500 text-white hover:bg-red-600 flex items-center"
               onClick={() => {
                 setIsConfirmDialogOpen(false)
-                setIsTimeUp(true)
-                setIsStarted(false) // 早期終了時に isStarted を false に設定
-                saveCanvasImage()
+                handleStop()
               }}
             >
               終わる
