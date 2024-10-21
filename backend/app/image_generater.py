@@ -1,83 +1,76 @@
 # backend/app/image_generator.py
 
-import os
-from pathlib import Path
-from typing import Optional
-
 import torch
-from diffusers import ControlNetModel, StableDiffusionControlNetPipeline
+from diffusers import StableDiffusionPipeline
 from PIL import Image
-from transformers import CLIPTextModel, CLIPTokenizer
 
-# 環境変数や設定
-CONTROLNET_MODEL_NAME = "lllyasviel/control_v11p_sd15_scribble"
-STABLE_DIFFUSION_MODEL_NAME = "runwayml/stable-diffusion-v1-5"
-
-# デバイス設定
+# モデルのロード（事前に必要なモデルをダウンロードしておく）
+model_id = "CompVis/stable-diffusion-v1-4"
 device = "cuda" if torch.cuda.is_available() else "cpu"
-
-# モデルのロード
-
-
-def load_models():
-    print("Loading ControlNet model...")
-    controlnet = ControlNetModel.from_pretrained(
-        CONTROLNET_MODEL_NAME, torch_dtype=torch.float16 if device == "cuda" else torch.float32)
-    print("Loading Stable Diffusion model with ControlNet...")
-    pipe = StableDiffusionControlNetPipeline.from_pretrained(
-        STABLE_DIFFUSION_MODEL_NAME,
-        controlnet=controlnet,
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32
-    )
-    pipe = pipe.to(device)
-    pipe.enable_xformers_memory_efficient_attention()
-    return pipe
-
-# 画像生成関数
-
-
-def generate_image(pipe, input_image_path: str, prompt: str, output_image_path: str, guidance_scale: float = 7.5, num_inference_steps: int = 50):
-    try:
-        print(f"Processing input image: {input_image_path}")
-        init_image = Image.open(input_image_path).convert("RGB")
-        init_image = init_image.resize((768, 768))  # サイズ調整
-
-        print(f"Generating image with prompt: {prompt}")
-        output = pipe(
-            prompt=prompt,
-            control_image=init_image,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-        ).images[0]
-
-        output.save(output_image_path)
-        print(f"Generated image saved to: {output_image_path}")
-    except Exception as e:
-        print(f"Error during image generation: {e}")
-
-# メイン関数
-
+pipe = StableDiffusionPipeline.from_pretrained(model_id)
+pipe = pipe.to(device)
 
 def main(input_image_path: str, prompt: str, output_image_path: str):
-    if not os.path.exists(input_image_path):
-        print(f"Input image does not exist: {input_image_path}")
-        return
+    """
+    AIによる画像生成を実行するメイン関数。
+    input_image_path: キャンバス画像のパス
+    prompt: 画像生成のプロンプト
+    output_image_path: 生成画像の出力パス
+    """
+    try:
+        # 入力画像の読み込み
+        input_image = Image.open(input_image_path).convert("RGB")
 
-    pipe = load_models()
-    generate_image(pipe, input_image_path, prompt, output_image_path)
+        # 画像生成
+        generated_image = pipe(prompt=prompt, init_image=input_image, strength=0.8).images[0]
+
+        # 生成画像の保存
+        generated_image.save(output_image_path)
+    except Exception as e:
+        raise RuntimeError(f"画像生成中にエラーが発生しました: {e}")
 
 
-if __name__ == "__main__":
-    import argparse
+# import torch
+# from PIL import Image
+# import cv2
+# from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
+# from transformers import CLIPTextModel, CLIPTokenizer
+# from diffusers.utils import load_image
 
-    parser = argparse.ArgumentParser(
-        description="Generate image using ControlNet and Stable Diffusion.")
-    parser.add_argument("--input", type=str, required=True,
-                        help="Path to the input scribble image.")
-    parser.add_argument("--prompt", type=str, required=True,
-                        help="Text prompt for image generation.")
-    parser.add_argument("--output", type=str, required=True,
-                        help="Path to save the generated image.")
+# # GPUが利用可能かチェック
+# device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    args = parser.parse_args()
-    main(args.input, args.prompt, args.output)
+# # ControlNet Scribble モデルの読み込み
+# controlnet = ControlNetModel.from_pretrained(
+#     "lllyasviel/sd-controlnet-scribble", torch_dtype=torch.float16
+# ).to(device)
+
+# # Stable Diffusion XL Turbo モデルの読み込み
+# pipe = StableDiffusionControlNetPipeline.from_pretrained(
+#     "stabilityai/stable-diffusion-xl-turbo", controlnet=controlnet, torch_dtype=torch.float16
+# ).to(device)
+
+# # 高速化のためにmemory efficient attentionを有効化
+# pipe.enable_xformers_memory_efficient_attention()
+
+# # 手書きScribble画像の読み込みと前処理
+# def preprocess_image(image_path):
+#     image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)  # 画像をグレースケールで読み込む
+#     image = cv2.resize(image, (512, 512))  # Stable Diffusionが要求するサイズにリサイズ
+#     image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)  # 3チャンネルに変換
+#     pil_image = Image.fromarray(image)  # PIL形式に変換
+#     return pil_image
+
+# # Scribble画像とテキストプロンプトを指定
+# scribble_image_path = "scribble.png"  # 手書きのScribble画像のパス
+# scribble_image = preprocess_image(scribble_image_path)
+# text_prompt = "a futuristic cityscape with neon lights at night"
+
+# # 画像生成
+# generated_images = pipe(prompt=text_prompt, image=scribble_image, num_inference_steps=50).images
+
+# # 生成された画像を保存
+# generated_image = generated_images[0]
+# generated_image.save("generated_image.png")
+
+# print("画像生成が完了しました。結果は 'generated_image.png' に保存されました。")

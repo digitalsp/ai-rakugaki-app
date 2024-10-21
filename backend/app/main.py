@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
-from . import crud, database, models, schemas
+from . import crud, database, image_generater, models, schemas
 
 app = FastAPI()
 
