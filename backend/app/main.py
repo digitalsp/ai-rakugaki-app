@@ -280,7 +280,7 @@ async def process_image_generation(image_id: int, device_id: str):
         generated_file_path = GENERATED_IMAGES_DIR / f"generated_{db_image.id}.png"
 
         # 画像生成の実行
-        import app.image_generator
+        import app.image_generater
 
         try:
             app.image_generator.main(
