@@ -158,17 +158,17 @@ image = load_image(image_path)
 image = canny_detector(image, detect_resolution=384, image_resolution=1024)
 
 # テキストプロンプト
-prompt = "A futuristic cityscape with neon lights at night"
+prompt = "masterpiece, flying ufo, flying object, space, stars, moon, earth"
 negative_prompt = "extra digit, fewer digits, cropped, worst quality, low quality, glitch, deformed"
 
-# 画像生成（推論ステップ数を30から20に削減）
+# 画像生成（推論ステップ数10）
 gen_images = pipe(
     prompt=prompt,
     negative_prompt=negative_prompt,
     image=image,
-    num_inference_steps=20,  # 推論ステップ数の削減
+    num_inference_steps=10,  # 推論ステップ数
     guidance_scale=7.5,
-    adapter_conditioning_scale=0.8
+    adapter_conditioning_scale=0.5
 ).images[0]
 
 # 生成された画像を保存
