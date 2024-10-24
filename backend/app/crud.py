@@ -1,5 +1,6 @@
 # backend/app/crud.py
 
+import datetime
 import random
 import uuid
 from typing import List, Optional
@@ -32,19 +33,20 @@ def get_random_topic(db: Session) -> Optional[models.Topic]:
     return random.choice(topics)
 
 
-def create_image(
-    db: Session, device_id: str, topic_id: int, canvas_image_filename: str
-) -> models.Image:
-    """キャンバス画像を保存し、Imageエントリを作成する"""
-    db_image = models.Image(
+def create_image(db: Session, device_id: str, topic: str) -> models.Image:
+    """新しい画像エントリを作成する"""
+    image = models.Image(
+        id=str(uuid.uuid4()),
         device_id=device_id,
-        topic_id=topic_id,
-        canvas_image_filename=canvas_image_filename,
+        canvas_image_filename="",
+        generated_image_filename="",
+        request_time=datetime.datetime.utcnow(),
+        topic=topic
     )
-    db.add(db_image)
+    db.add(image)
     db.commit()
-    db.refresh(db_image)
-    return db_image
+    db.refresh(image)
+    return image
 
 
 def update_generated_image(
@@ -60,6 +62,11 @@ def update_generated_image(
     return db_image
 
 
-def get_images_by_device(db: Session, device_id: str) -> List[models.Image]:
-    """指定されたデバイスIDに関連する画像を取得する"""
-    return db.query(models.Image).filter(models.Image.device_id == device_id).all()
+def get_image_by_id(db: Session, image_id: str) -> Optional[models.Image]:
+    """指定された画像IDの画像を取得する"""
+    return db.query(models.Image).filter(models.Image.id == image_id).first()
+
+
+def get_latest_image(db: Session, device_id: str) -> Optional[models.Image]:
+    """指定されたデバイスIDの最新の画像を取得する"""
+    return db.query(models.Image).filter(models.Image.device_id == device_id).order_by(models.Image.request_time.desc()).first()

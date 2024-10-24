@@ -1,4 +1,5 @@
 // frontend/src/app/result/page.tsx
+
 'use client'
 
 import { useRouter } from 'next/navigation'
@@ -6,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { Card } from "@/components/ui/card"
 import { ArrowRight } from 'lucide-react'
 import Image from 'next/image'
+import axios from 'axios'
 
 export default function ResultPage() {
   const router = useRouter()
@@ -26,42 +28,30 @@ export default function ResultPage() {
       setDeviceId(device_id)
       setTopic(currentTopic)
       setIsLoading(false)
+
+      // 生成画像を取得
+      fetchGeneratedImage(device_id)
     } else {
       // 必要なクエリパラメータが不足している場合、ホームページにリダイレクト
       router.push('/')
     }
   }, [router])
 
-  useEffect(() => {
-    if (deviceId) {
-      // WebSocketの設定
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
-      const wsHost = process.env.NEXT_PUBLIC_BACKEND_WS_HOST || 'localhost:8000'
-      const socket = new WebSocket(`${wsProtocol}${wsHost}/ws/${deviceId}`)
-
-      socket.onopen = () => {
-        console.log('WebSocket接続が確立しました')
+  const fetchGeneratedImage = async (device_id: string) => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+      const response = await axios.get(`${backendUrl}/get-latest-image`, {
+        params: { device_id }
+      })
+      if (response.data.success && response.data.generatedImageUrl) {
+        setGeneratedImageUrl(response.data.generatedImageUrl)
+      } else {
+        console.error('生成画像が取得できませんでした')
       }
-
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          setGeneratedImageUrl(data.generatedImageUrl)
-          console.log('生成された画像を受信しました:', data)
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error)
-        }
-      }
-
-      socket.onerror = (error) => {
-        console.error('WebSocketエラー:', error)
-      }
-
-      return () => {
-        socket.close()
-      }
+    } catch (error) {
+      console.error('生成画像の取得中にエラーが発生しました:', error)
     }
-  }, [deviceId])
+  }
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-screen">画像を読み込んでいます...</div>
@@ -80,6 +70,7 @@ export default function ResultPage() {
                 src={canvasImageUrl}
                 alt="キャンバスの画像"
                 fill
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // sizes プロパティを追加
                 style={{ objectFit: 'contain' }}
                 className="rounded-lg shadow-md"
               />
@@ -98,6 +89,7 @@ export default function ResultPage() {
                   src={generatedImageUrl}
                   alt="生成された画像"
                   fill
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // sizes プロパティを追加
                   style={{ objectFit: 'contain' }}
                   className="rounded-lg shadow-md"
                 />

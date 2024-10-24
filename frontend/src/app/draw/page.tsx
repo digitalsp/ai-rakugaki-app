@@ -1,6 +1,8 @@
 // frontend/src/app/draw/page.tsx
+
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -15,7 +17,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
-import { useRouter } from 'next/navigation'
 import axios from 'axios'
 
 export default function DrawingPage() {
@@ -33,16 +34,19 @@ export default function DrawingPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const router = useRouter()
   const [deviceId, setDeviceId] = useState<string>('')
+  const [imageId, setImageId] = useState<string>('')
 
   useEffect(() => {
-    // ローカルストレージからデバイスIDとお題を取得
+    // ローカルストレージからデバイスIDとお題、画像IDを取得
     const storedDeviceId = localStorage.getItem('device_id')
     const storedTopic = localStorage.getItem('current_topic')
-    if (storedDeviceId && storedTopic) {
+    const storedImageId = localStorage.getItem('current_image_id')
+    if (storedDeviceId && storedTopic && storedImageId) {
       setDeviceId(storedDeviceId)
       setCurrentTopic(storedTopic)
+      setImageId(storedImageId)
     } else {
-      // デバイスIDが存在しない場合はランディングページにリダイレクト
+      // 必要な情報がない場合はランディングページにリダイレクト
       router.push('/')
     }
   }, [router])
@@ -127,26 +131,33 @@ export default function DrawingPage() {
   }
 
   const saveCanvasImage = async () => {
-    if (canvasRef.current && deviceId && !isSavedRef.current) {
+    if (canvasRef.current && deviceId && imageId && !isSavedRef.current) {
       isSavedRef.current = true // 二重保存を防ぐフラグ
       const image = canvasRef.current.toDataURL('image/png')
       try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
         const response = await axios.post(`${backendUrl}/save-canvas`, {
           device_id: deviceId,
+          image_id: imageId, // 既存の画像IDを使用
           image_data: image,
+          negative_prompt: "" // 必要に応じてネガティブプロンプトを設定
         })
         if (response.data.success) {
           console.log('キャンバス画像が保存されました:', response.data.file_name)
-          // 結果ページへ遷移し、キャンバス画像URLとデバイスIDをクエリパラメータとして渡す
+          // 結果ページへ遷移し、キャンバス画像URLとデバイスID、現在のトピックをクエリパラメータとして渡す
           const canvasImageUrl = `${backendUrl}/saved-images/${response.data.file_name}`
           const destinationUrl = `/result?canvasImageUrl=${encodeURIComponent(canvasImageUrl)}&deviceId=${encodeURIComponent(deviceId)}&topic=${encodeURIComponent(currentTopic)}`
-          router.push(destinationUrl)
+          console.log('Redirecting to:', destinationUrl)
+          // 遷移を遅らせる（1秒後に遷移）
+          setTimeout(() => {
+            console.log('Navigating to destinationUrl')
+            router.push(destinationUrl)
+          }, 1000) // 1秒遅らせる
         } else {
           console.error('キャンバス画像の保存に失敗しました')
           setError('キャンバス画像の保存に失敗しました')
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('キャンバス画像の保存中にエラーが発生しました:', error)
         setError('キャンバス画像の保存中にエラーが発生しました')
       }

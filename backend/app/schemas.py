@@ -1,59 +1,8 @@
 # backend/app/schemas.py
 
-from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel
-
-
-class DeviceRegisterRequest(BaseModel):
-    pass
-
-
-class DeviceRegisterResponse(BaseModel):
-    success: bool
-    device_id: Optional[str] = None
-    topic: Optional[str] = None
-    detail: Optional[str] = None
-
-
-class DeviceVerifyRequest(BaseModel):
-    device_id: str
-
-
-class DeviceVerifyResponse(BaseModel):
-    success: bool
-    device_id: Optional[str] = None
-    topic: Optional[str] = None
-    detail: Optional[str] = None
-
-
-class SaveCanvasRequest(BaseModel):
-    device_id: str
-    image_data: str  # Base64-encoded image data
-
-
-class SaveCanvasResponse(BaseModel):
-    success: bool
-    file_name: Optional[str] = None
-    detail: Optional[str] = None
-
-
-class ImageEntry(BaseModel):
-    id: int
-    topic: str
-    request_time: datetime
-    canvas_image_filename: str
-    controlnet_image_filename: Optional[str]
-    generated_image_filename: Optional[str]
-
-
-class GetImagesResponse(BaseModel):
-    success: bool
-    images: Optional[List[ImageEntry]] = None
-    detail: Optional[str] = None
-
-# 新規追加
 
 
 class GetNewTopicRequest(BaseModel):
@@ -62,5 +11,40 @@ class GetNewTopicRequest(BaseModel):
 
 class GetNewTopicResponse(BaseModel):
     success: bool
-    topic: Optional[str] = None
-    detail: Optional[str] = None
+    topic: str
+    image_id: str
+
+    class Config:
+        orm_mode = True
+
+
+class GetTopicResponse(BaseModel):
+    success: bool
+    topic: str
+
+    class Config:
+        orm_mode = True
+
+
+class SaveCanvasRequest(BaseModel):
+    device_id: str
+    image_id: str
+    image_data: str
+    negative_prompt: Optional[str] = ""
+
+
+class SaveCanvasResponse(BaseModel):
+    success: bool
+    file_name: str
+    generated_image_url: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+
+class GetLatestImageResponse(BaseModel):
+    success: bool
+    generatedImageUrl: Optional[str] = None
+
+    class Config:
+        orm_mode = True
