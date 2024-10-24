@@ -241,7 +241,7 @@
 //   )
 // }
 
-// frontend/src/app/index/page.tsx
+// frontend/src/app/page.tsx
 
 'use client'
 
@@ -258,17 +258,57 @@ export default function LandingPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // デバイスIDを生成または取得
-    let storedDeviceId = localStorage.getItem('device_id')
-    if (!storedDeviceId) {
-      storedDeviceId = crypto.randomUUID()
-      localStorage.setItem('device_id', storedDeviceId)
+    // デバイスIDを取得または生成
+    const storedDeviceId = localStorage.getItem('device_id')
+    if (storedDeviceId) {
+      setDeviceId(storedDeviceId)
+      verifyDevice(storedDeviceId)
+    } else {
+      registerDevice()
     }
-    setDeviceId(storedDeviceId)
   }, [])
+
+  const registerDevice = async () => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+      const response = await axios.post(`${backendUrl}/register-device`)
+      const newDeviceId = response.data.id
+      localStorage.setItem('device_id', newDeviceId)
+      setDeviceId(newDeviceId)
+      // 初期トピックと画像エントリが含まれている
+      if (response.data.images && response.data.images.length > 0) {
+        const initialImage = response.data.images[0]
+        localStorage.setItem('current_topic', initialImage.topic.name)
+        localStorage.setItem('current_image_id', initialImage.id)
+      }
+    } catch (err) {
+      console.error('デバイス登録中にエラーが発生しました:', err)
+      setError('デバイスの登録に失敗しました。再試行してください。')
+    }
+  }
+
+  const verifyDevice = async (deviceId: string) => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+      const response = await axios.post(`${backendUrl}/verify-device`, { device_id: deviceId })
+      // 最新の画像エントリからお題と画像IDを取得
+      if (response.data.images && response.data.images.length > 0) {
+        const latestImage = response.data.images[0]
+        localStorage.setItem('current_topic', latestImage.topic.name)
+        localStorage.setItem('current_image_id', latestImage.id)
+      }
+    } catch (err) {
+      console.error('デバイス検証中にエラーが発生しました:', err)
+      setError('デバイスの検証に失敗しました。再登録してください。')
+      // デバイスを再登録
+      localStorage.removeItem('device_id')
+      registerDevice()
+    }
+  }
 
   const startGame = async () => {
     setLoading(true)
+    setError(null)
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
       const response = await axios.post(`${backendUrl}/get-new-topic`, {
@@ -277,10 +317,10 @@ export default function LandingPage() {
       if (response.data.success) {
         const newTopic = response.data.topic
         const imageId = response.data.image_id
-        // お題をローカルストレージに保存
+        // お題と画像IDをローカルストレージに保存
         localStorage.setItem('current_topic', newTopic)
         localStorage.setItem('current_image_id', imageId)
-        // お絵描きページに遷移
+        // お絵かきページに遷移
         router.push(`/draw?image_id=${imageId}`)
       } else {
         setError('お題の取得に失敗しました。再試行してください。')

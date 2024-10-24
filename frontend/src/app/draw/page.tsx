@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -33,23 +33,34 @@ export default function DrawingPage() {
   const isSavedRef = useRef(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [deviceId, setDeviceId] = useState<string>('')
   const [imageId, setImageId] = useState<string>('')
+  const [ws, setWs] = useState<WebSocket | null>(null)
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string>('')
+  const [canvasImageUrl, setCanvasImageUrl] = useState<string>('')
 
   useEffect(() => {
-    // ローカルストレージからデバイスIDとお題、画像IDを取得
-    const storedDeviceId = localStorage.getItem('device_id')
-    const storedTopic = localStorage.getItem('current_topic')
-    const storedImageId = localStorage.getItem('current_image_id')
-    if (storedDeviceId && storedTopic && storedImageId) {
-      setDeviceId(storedDeviceId)
-      setCurrentTopic(storedTopic)
-      setImageId(storedImageId)
+    // クエリパラメータから画像IDを取得
+    const imageIdParam = searchParams.get('image_id')
+    if (imageIdParam) {
+      setImageId(imageIdParam)
+      const storedDeviceId = localStorage.getItem('device_id')
+      const storedTopic = localStorage.getItem('current_topic')
+      if (storedDeviceId && storedTopic) {
+        setDeviceId(storedDeviceId)
+        setCurrentTopic(storedTopic)
+        // 保存されている画像URLを設定
+        setCanvasImageUrl(`http://localhost:8000/saved-images/${imageIdParam}.png`)
+      } else {
+        // 必要な情報がない場合はランディングページにリダイレクト
+        router.push('/')
+      }
     } else {
-      // 必要な情報がない場合はランディングページにリダイレクト
+      // 画像IDがない場合はランディングページにリダイレクト
       router.push('/')
     }
-  }, [router])
+  }, [searchParams, router])
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -87,7 +98,62 @@ export default function DrawingPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [isStarted, isConfirmDialogOpen])
+  }, [isStarted, isConfirmDialogOpen, timeLeft])
+
+  useEffect(() => {
+    if (deviceId) {
+      // WebSocket接続の設定
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+      const wsProtocol = backendUrl.startsWith('https') ? 'wss' : 'ws'
+      const wsUrl = `${wsProtocol}://${backendUrl.replace(/^https?:\/\//, '')}/ws/${deviceId}`
+      const websocket = new WebSocket(wsUrl)
+      setWs(websocket)
+
+      websocket.onopen = () => {
+        console.log('WebSocket接続が確立しました。')
+      }
+
+      websocket.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        console.log('通知を受信:', data)
+        if (data.generatedImageUrl) {
+          setGeneratedImageUrl(data.generatedImageUrl)
+          // 結果ページに遷移（generatedImageUrlも渡す）
+          router.push(`/result?canvasImageUrl=${encodeURIComponent(data.canvasImageUrl)}&generatedImageUrl=${encodeURIComponent(data.generatedImageUrl)}&deviceId=${encodeURIComponent(deviceId)}&topic=${encodeURIComponent(data.topic)}`)
+        }
+      }
+
+      websocket.onclose = () => {
+        console.log('WebSocket接続が閉じられました。')
+      }
+
+      websocket.onerror = (error) => {
+        console.error('WebSocketエラー:', error)
+      }
+
+      return () => {
+        websocket.close()
+      }
+    }
+  }, [deviceId, router])
+
+  const startDrawingSession = () => {
+    setIsStarted(true)
+    setTimeLeft(30) // 30秒に設定
+    setIsTimeUp(false)
+    clearCanvas()
+    isSavedRef.current = false
+  }
+
+  const finishDrawingSession = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    setIsTimeUp(true)
+    setIsStarted(false)
+    saveCanvasImage()
+  }
 
   const startDrawing = ({ nativeEvent }: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isStarted || isTimeUp) return
@@ -137,22 +203,14 @@ export default function DrawingPage() {
       try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
         const response = await axios.post(`${backendUrl}/save-canvas`, {
-          device_id: deviceId,
+          device_id: deviceId, // デバイスID
           image_id: imageId, // 既存の画像IDを使用
           image_data: image,
           negative_prompt: "" // 必要に応じてネガティブプロンプトを設定
         })
         if (response.data.success) {
           console.log('キャンバス画像が保存されました:', response.data.file_name)
-          // 結果ページへ遷移し、キャンバス画像URLとデバイスID、現在のトピックをクエリパラメータとして渡す
-          const canvasImageUrl = `${backendUrl}/saved-images/${response.data.file_name}`
-          const destinationUrl = `/result?canvasImageUrl=${encodeURIComponent(canvasImageUrl)}&deviceId=${encodeURIComponent(deviceId)}&topic=${encodeURIComponent(currentTopic)}`
-          console.log('Redirecting to:', destinationUrl)
-          // 遷移を遅らせる（1秒後に遷移）
-          setTimeout(() => {
-            console.log('Navigating to destinationUrl')
-            router.push(destinationUrl)
-          }, 1000) // 1秒遅らせる
+          // 生成画像がWebSocket経由で通知されるため、結果ページへの遷移はWebSocketのメッセージで行う
         } else {
           console.error('キャンバス画像の保存に失敗しました')
           setError('キャンバス画像の保存に失敗しました')
@@ -162,24 +220,6 @@ export default function DrawingPage() {
         setError('キャンバス画像の保存中にエラーが発生しました')
       }
     }
-  }
-
-  const handleStart = () => {
-    setIsStarted(true)
-    setTimeLeft(30) // 30秒に設定
-    setIsTimeUp(false)
-    clearCanvas()
-    isSavedRef.current = false
-  }
-
-  const handleStop = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    setIsTimeUp(true)
-    setIsStarted(false)
-    saveCanvasImage()
   }
 
   return (
@@ -229,7 +269,7 @@ export default function DrawingPage() {
           </div>
           {!isStarted ? (
             <Button
-              onClick={handleStart}
+              onClick={startDrawingSession}
               className="bg-green-500 hover:bg-green-600 flex items-center"
               disabled={!currentTopic}
             >
@@ -278,7 +318,7 @@ export default function DrawingPage() {
               className="bg-red-500 text-white hover:bg-red-600 flex items-center"
               onClick={() => {
                 setIsConfirmDialogOpen(false)
-                handleStop()
+                finishDrawingSession()
               }}
             >
               終わる

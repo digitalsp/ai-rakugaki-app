@@ -1,18 +1,20 @@
 // frontend/src/app/history/page.tsx
+
 'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
 import { Card } from "@/components/ui/card"
+import Image from 'next/image'
 
 interface ImageEntry {
-    id: number
+    id: string
     topic: string
     request_time: string
     canvas_image_filename: string
-    controlnet_image_filename?: string
     generated_image_filename?: string
+    negative_prompt?: string
 }
 
 export default function HistoryPage() {
@@ -78,13 +80,20 @@ export default function HistoryPage() {
                         <Card key={image.id} className="cursor-pointer" onClick={() => {
                             if (image.generated_image_filename) {
                                 handleImageClick(`http://localhost:8000/generated-images/${image.generated_image_filename}`)
+                            } else {
+                                handleImageClick(`http://localhost:8000/saved-images/${image.canvas_image_filename}`)
                             }
                         }}>
-                            <img
-                                src={image.generated_image_filename ? `http://localhost:8000/generated-images/${image.generated_image_filename}` : `http://localhost:8000/saved-images/${image.canvas_image_filename}`}
-                                alt={`Image ${image.id}`}
-                                className="w-full h-40 object-cover rounded-lg"
-                            />
+                            <div className="relative aspect-square">
+                                <Image
+                                    src={image.generated_image_filename ? `http://localhost:8000/generated-images/${image.generated_image_filename}` : `http://localhost:8000/saved-images/${image.canvas_image_filename}`}
+                                    alt={`Image ${image.id}`}
+                                    fill
+                                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                    style={{ objectFit: 'cover' }}
+                                    className="rounded-lg shadow-md"
+                                />
+                            </div>
                             <div className="mt-2">
                                 <p className="text-sm text-gray-700">お題: {image.topic}</p>
                                 <p className="text-xs text-gray-500">生成日時: {new Date(image.request_time).toLocaleString()}</p>
@@ -94,17 +103,26 @@ export default function HistoryPage() {
                 </div>
             </div>
 
-            {/* Modal for displaying selected image */}
+            {/* モーダルで画像を表示 */}
             {selectedImage && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-4 rounded-lg relative">
+                    <div className="bg-white p-4 rounded-lg relative max-w-3xl w-full">
                         <button
                             onClick={closeModal}
-                            className="absolute top-2 right-2 text-gray-700"
+                            className="absolute top-2 right-2 text-gray-700 text-xl font-bold"
                         >
                             ✖️
                         </button>
-                        <img src={selectedImage} alt="Selected" className="max-w-full max-h-screen" />
+                        <div className="relative aspect-square">
+                            <Image
+                                src={selectedImage}
+                                alt="Selected Image"
+                                fill
+                                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                style={{ objectFit: 'contain' }}
+                                className="rounded-lg shadow-md"
+                            />
+                        </div>
                     </div>
                 </div>
             )}
