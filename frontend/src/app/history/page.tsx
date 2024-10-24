@@ -3,7 +3,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import axios from 'axios'
 import { Card } from "@/components/ui/card"
 import Image from 'next/image'
@@ -22,7 +21,6 @@ export default function HistoryPage() {
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<string | null>(null)
     const [selectedImage, setSelectedImage] = useState<string | null>(null)
-    const router = useRouter()
 
     useEffect(() => {
         const fetchImages = async () => {
@@ -44,7 +42,8 @@ export default function HistoryPage() {
                 } else {
                     setError(response.data.detail || '画像の取得に失敗しました。')
                 }
-            } catch (error: any) {
+            } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+                // eslintのエラー無視
                 setError('画像の取得中にエラーが発生しました。')
                 console.error('Error fetching images:', error)
             } finally {

@@ -1,0 +1,13 @@
+generated_image.png
+SD1.5-test.py
+test_for_enviroments.py
+CUDA_test.py
+saved-images/*
+generated_images/*
+pretreatmented-images/*
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+.git

@@ -1,0 +1,57 @@
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ai-rakugaki-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/ai_rakugaki_db
+      - OTHER_ENV_VARS=値 # 必要に応じて追加
+    depends_on:
+      - db
+    volumes:
+      - backend_data:/app/saved-images
+      - backend_generated:/app/generated-images
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            device_ids: ['2']
+            capabilities: [gpu]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: ai-rakugaki-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://backend:8000
+      - OTHER_ENV_VARS=値 # 必要に応じて追加
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:14-alpine
+    container_name: ai-rakugaki-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ai_rakugaki_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
+  backend_data:
+  backend_generated:

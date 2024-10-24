@@ -1,0 +1,35 @@
+# Node.jsの依存関係を無視
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Next.jsのビルド出力を無視
+.next
+out
+
+# テスト関連のファイルを無視
+coverage
+jest.config.js
+
+# 環境変数ファイルを無視
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Git関連のファイルを無視
+.git
+.gitignore
+
+# Docker関連のファイルを無視
+Dockerfile
+docker-compose.yml
+
+# OS固有のファイルを無視
+.DS_Store
+Thumbs.db
+
+# 一時ファイルを無視
+tmp
+temp

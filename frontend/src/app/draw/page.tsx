@@ -36,9 +36,9 @@ export default function DrawingPage() {
   const searchParams = useSearchParams()
   const [deviceId, setDeviceId] = useState<string>('')
   const [imageId, setImageId] = useState<string>('')
-  const [ws, setWs] = useState<WebSocket | null>(null)
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string>('')
-  const [canvasImageUrl, setCanvasImageUrl] = useState<string>('')
+  const [, setWs] = useState<WebSocket | null>(null)
+  const [, setGeneratedImageUrl] = useState<string>('')
+  const [, setCanvasImageUrl] = useState<string>('')
 
   useEffect(() => {
     // クエリパラメータから画像IDを取得
@@ -215,7 +215,8 @@ export default function DrawingPage() {
           console.error('キャンバス画像の保存に失敗しました')
           setError('キャンバス画像の保存に失敗しました')
         }
-      } catch (error: any) {
+      } catch (error: any) {// eslint-disable-line @typescript-eslint/no-explicit-any
+        // eslintのエラー無視
         console.error('キャンバス画像の保存中にエラーが発生しました:', error)
         setError('キャンバス画像の保存中にエラーが発生しました')
       }

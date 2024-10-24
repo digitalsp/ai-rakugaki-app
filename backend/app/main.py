@@ -344,9 +344,9 @@ async def process_image_generation(image_id: str, device_id: str):
                 prompt=prompt,
                 negative_prompt=negative_prompt,
                 image=image,
-                num_inference_steps=25,
-                guidance_scale=5.5,
-                adapter_conditioning_scale=0.8
+                num_inference_steps=100,
+                guidance_scale=6.5,
+                adapter_conditioning_scale=0.7
             ).images[0]
         except Exception as e:
             logger.exception(f"画像生成に失敗しました: {e}")

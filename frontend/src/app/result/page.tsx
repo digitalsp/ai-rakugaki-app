@@ -7,7 +7,6 @@ import { useEffect, useState } from 'react'
 import { Card } from "@/components/ui/card"
 import { ArrowRight } from 'lucide-react'
 import Image from 'next/image'
-import axios from 'axios'
 
 export default function ResultPage() {
   const router = useRouter()
@@ -16,7 +15,7 @@ export default function ResultPage() {
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string>('')
   const [topic, setTopic] = useState<string>('')
   const [isLoading, setIsLoading] = useState<boolean>(true)
-  const [deviceId, setDeviceId] = useState<string>('')
+  const [, setDeviceId] = useState<string>('')
 
   useEffect(() => {
     const canvasUrl = searchParams.get('canvasImageUrl') || ''

@@ -51,13 +51,16 @@ pipe.enable_attention_slicing()
 
 # CannyDetectorを使ってエッジ検出
 canny_detector = CannyDetector()
-image_path = "./saved-images/a1dca005-edf6-4364-ad5c-969c20ba3cf4.png"
+image_path = "./saved-images/cf5fa3b1-e11f-4e7d-9a03-b5483f182bae.png"
 image = load_image(image_path)
 image = canny_detector(image, detect_resolution=384, image_resolution=1024)
 
 # テキストプロンプト
-prompt = "masterpiece, flying ufo, flying object, space, stars, moon, earth"
-negative_prompt = "bad quality, low quality, lowres, displeasing, very displeasing, bad anatomy, bad hands, scan artifacts, monochrome, guro, extra digit, fewer digits, cropped, worst quality, low quality, glitch, deformed"
+# prompt = "masterpiece, flying ufo, flying object, space, stars, moon, earth"
+# negative_prompt = "bad quality, low quality, lowres, displeasing, very displeasing, bad anatomy, bad hands, scan artifacts, monochrome, guro, extra digit, fewer digits, cropped, worst quality, low quality, glitch, deformed"
+
+prompt="masterpiece, cool, robot, futuristic"
+negative_prompt="low quality, bad anatomy, missing limbs, bad quality, lowres, displeasing, very displeasing, bad hands, scan artifacts, monochrome, guro, extra digit, fewer digits, cropped, worst quality, glitch, deformed, text, error, missing, watermark, unfinished, signature, username, abstract"
 
 # 画像生成（推論ステップ数10）
 gen_images = pipe(
