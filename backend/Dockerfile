@@ -1,5 +1,5 @@
 # ベースイメージとして公式のPythonイメージを使用
-FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:12.6.2-cudnn-runtime-ubuntu22.04
 
 # 環境変数の設定
 # Huggingfaceのキャッシュ先ディレクトリ変更
